@@ -2,7 +2,9 @@
 
 A production-ready, restart-resilient full-stack cold email scheduler built with **React (Vite + TypeScript)** on the frontend and **Node.js (Express, Kysely, MySQL, Redis, BullMQ)** on the backend.
 
----
+[![Deploy to Render](https://render.com/images/deploy-to-render.svg)](https://render.com/deploy?repo=https://github.com/Sriya-222/Email_Scheduler)
+[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/new/template?template=https://github.com/Sriya-222/Email_Scheduler)
+
 
 ## 🚀 Quick Start
 

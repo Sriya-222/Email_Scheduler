@@ -23,7 +23,7 @@ export async function initializeDatabase() {
   } catch (error: any) {
     console.log('Database tables not found. Executing schema.sql...');
     try {
-      const schemaPath = path.resolve(__dirname, '../db/schema.sql');
+      const schemaPath = path.resolve(process.cwd(), 'src/db/schema.sql');
       const schemaSql = fs.readFileSync(schemaPath, 'utf8');
       
       // Clean and split schema SQL statements
