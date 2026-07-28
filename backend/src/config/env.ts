@@ -15,6 +15,7 @@ const envSchema = z.object({
   DB_NAME: z.string().default('reachinbox_scheduler'),
   REDIS_HOST: z.string().default('localhost'),
   REDIS_PORT: z.coerce.number().default(6379),
+  REDIS_PASSWORD: z.string().default(''),
   SMTP_HOST: z.string().default('smtp.ethereal.email'),
   SMTP_PORT: z.coerce.number().default(587),
   SMTP_USER: z.string().default(''),
