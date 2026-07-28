@@ -4,6 +4,7 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci
 COPY . .
+RUN chmod -R +x node_modules/.bin
 RUN npm run build
 
 # Production stage
