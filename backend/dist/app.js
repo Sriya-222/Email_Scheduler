@@ -10,10 +10,22 @@ const errorHandler_1 = require("./middleware/errorHandler");
 const auth_1 = __importDefault(require("./routes/auth"));
 const senders_1 = __importDefault(require("./routes/senders"));
 const emails_1 = __importDefault(require("./routes/emails"));
+const env_1 = require("./config/env");
 const app = (0, express_1.default)();
 // Configure CORS to allow frontend calls with cookie credentials
+const allowedOrigins = [
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+    'https://email-scheduler-ecru.vercel.app',
+    env_1.env.FRONTEND_URL,
+].filter(Boolean);
 app.use((0, cors_1.default)({
-    origin: ['http://localhost:5173', 'http://127.0.0.1:5173'],
+    origin: (origin, callback) => {
+        if (!origin || allowedOrigins.includes(origin) || origin.endsWith('.vercel.app')) {
+            return callback(null, true);
+        }
+        return callback(null, true); // Allow for production flexibility
+    },
     credentials: true,
 }));
 app.use(express_1.default.json());

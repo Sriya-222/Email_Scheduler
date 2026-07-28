@@ -60,7 +60,7 @@ router.post('/google', async (req: Request, res: Response, next: NextFunction) =
     res.cookie('session_token', token, {
       httpOnly: true,
       secure: env.NODE_ENV === 'production',
-      sameSite: 'lax',
+      sameSite: env.NODE_ENV === 'production' ? 'none' : 'lax',
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     });
 
@@ -86,7 +86,7 @@ router.post('/logout', (req: Request, res: Response) => {
   res.clearCookie('session_token', {
     httpOnly: true,
     secure: env.NODE_ENV === 'production',
-    sameSite: 'lax',
+    sameSite: env.NODE_ENV === 'production' ? 'none' : 'lax',
   });
   return res.json({ success: true });
 });

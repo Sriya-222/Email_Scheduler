@@ -26,6 +26,7 @@ const envSchema = zod_1.z.object({
     SMTP_PASS: zod_1.z.string().default(''),
     GOOGLE_CLIENT_ID: zod_1.z.string().default(''),
     GOOGLE_CLIENT_SECRET: zod_1.z.string().default(''),
+    FRONTEND_URL: zod_1.z.string().optional(),
     JWT_SECRET: zod_1.z.string().default('replace_with_random_string'),
     WORKER_CONCURRENCY: zod_1.z.coerce.number().default(5),
     MIN_DELAY_BETWEEN_EMAILS_MS: zod_1.z.coerce.number().default(2000),
