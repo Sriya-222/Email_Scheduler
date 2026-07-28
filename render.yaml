@@ -1,0 +1,71 @@
+services:
+  # 1. Private MySQL Database Service
+  - type: pserv
+    name: mysql
+    env: docker
+    dockerfilePath: backend/db.Dockerfile
+    disk:
+      name: mysql-data
+      mountPath: /var/lib/mysql
+      sizeGB: 1
+    envVars:
+      - key: MYSQL_ROOT_PASSWORD
+        value: root
+      - key: MYSQL_DATABASE
+        value: reachinbox_scheduler
+      - key: MYSQL_USER
+        value: scheduler
+      - key: MYSQL_PASSWORD
+        value: scheduler_pw
+
+  # 2. Private Redis Queue Cache Service
+  - type: pserv
+    name: redis
+    env: docker
+    dockerfilePath: backend/redis.Dockerfile
+    disk:
+      name: redis-data
+      mountPath: /data
+      sizeGB: 1
+
+  # 3. Web Service: Node Express Backend
+  - type: web
+    name: backend
+    env: docker
+    dockerfilePath: backend/Dockerfile
+    envVars:
+      - key: PORT
+        value: 4000
+      - key: NODE_ENV
+        value: production
+      - key: DB_HOST
+        value: mysql
+      - key: DB_PORT
+        value: 3306
+      - key: DB_USER
+        value: scheduler
+      - key: DB_PASSWORD
+        value: scheduler_pw
+      - key: DB_NAME
+        value: reachinbox_scheduler
+      - key: REDIS_HOST
+        value: redis
+      - key: REDIS_PORT
+        value: 6379
+      - key: JWT_SECRET
+        generateValue: true
+      - key: WORKER_CONCURRENCY
+        value: 5
+      - key: MIN_DELAY_BETWEEN_EMAILS_MS
+        value: 2000
+      - key: MAX_EMAILS_PER_HOUR
+        value: 200
+
+  # 4. Web Service: React/Nginx Frontend
+  - type: web
+    name: frontend
+    env: docker
+    dockerfilePath: frontend/Dockerfile
+    envVars:
+      - key: VITE_GOOGLE_CLIENT_ID
+        sync: false # Set by the user on the Render web UI during setup
