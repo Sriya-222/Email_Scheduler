@@ -18,9 +18,17 @@ const sharedOptions = {
 
 function createRedisConnection(): Redis {
   // Prefer REDIS_URL (Upstash-style full connection string: rediss://:password@host:port)
-  if (env.REDIS_URL) {
+  // MUST start with redis:// or rediss:// — anything else (e.g. https://) is invalid
+  const rawUrl = env.REDIS_URL?.trim();
+  if (rawUrl && (rawUrl.startsWith('redis://') || rawUrl.startsWith('rediss://'))) {
     console.log('[Redis] Using REDIS_URL for connection.');
-    return new Redis(env.REDIS_URL, sharedOptions);
+    return new Redis(rawUrl, sharedOptions);
+  }
+
+  if (rawUrl) {
+    console.warn(
+      '[Redis] REDIS_URL is set but has an invalid format (must start with redis:// or rediss://). Falling back to REDIS_HOST/PORT/PASSWORD.'
+    );
   }
 
   // Fallback: individual host/port/password vars
@@ -28,6 +36,8 @@ function createRedisConnection(): Redis {
     env.REDIS_HOST === 'localhost' ||
     env.REDIS_HOST === '127.0.0.1' ||
     env.REDIS_HOST === 'redis';
+
+  console.log(`[Redis] Connecting to ${env.REDIS_HOST}:${env.REDIS_PORT} (TLS: ${!isLocal})`);
 
   return new Redis({
     host: env.REDIS_HOST,
