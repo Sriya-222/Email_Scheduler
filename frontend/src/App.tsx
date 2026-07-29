@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { GoogleOAuthProvider } from '@react-oauth/google';
-import { api } from './lib/api';
+import { api, getToken } from './lib/api';
 import { User } from './lib/types';
 import { ToastProvider } from './components/ui/Toast';
 import { Login } from './pages/Login';
@@ -12,18 +12,30 @@ const AppContent: React.FC = () => {
   const [checkingAuth, setCheckingAuth] = useState(true);
 
   useEffect(() => {
+    const token = getToken();
+    // Only attempt to restore session if we have a token in localStorage
+    if (!token) {
+      setCheckingAuth(false);
+      return;
+    }
+
     api.getCurrentUser()
       .then((res) => {
         setUser(res.user);
       })
       .catch(() => {
-        // User not logged in, ignore error and show login
+        // Token was invalid or expired — clear it and show login
         setUser(null);
       })
       .finally(() => {
         setCheckingAuth(false);
       });
   }, []);
+
+  const handleLogout = () => {
+    api.logout();
+    setUser(null);
+  };
 
   if (checkingAuth) {
     return (
@@ -40,7 +52,7 @@ const AppContent: React.FC = () => {
     return <Login onLoginSuccess={setUser} />;
   }
 
-  return <Dashboard user={user} onLogout={() => setUser(null)} />;
+  return <Dashboard user={user} onLogout={handleLogout} />;
 };
 
 export default function App() {

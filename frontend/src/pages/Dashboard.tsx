@@ -119,7 +119,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
         
         <div className="stat-card glass">
           <span className="label" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-            <RefreshCw size={14} style={{ color: 'var(--status-processing-text)' }} className="spinner" />
+            <RefreshCw size={14} style={{ color: 'var(--status-processing-text)' }} className={stats.processing > 0 ? 'spinner' : ''} />
             Processing
           </span>
           <span className="value" style={{ color: 'var(--status-processing-text)' }}>

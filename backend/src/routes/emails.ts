@@ -7,10 +7,12 @@ import { createCampaign } from '../services/emailService';
 import { requireAuth } from '../middleware/auth';
 
 const router = Router();
-const upload = multer({ storage: multer.memoryStorage() });
 
-// Apply auth to all campaign/email routes
-router.use(requireAuth);
+// Multer middleware — memory storage, 5MB limit
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB max
+});
 
 const emailSchema = z.string().email();
 
@@ -26,22 +28,32 @@ const campaignInputSchema = z.object({
 
 /**
  * POST /api/leads/parse
- * Accepts a CSV or TXT file and parses email addresses from it.
+ * Parses email addresses from uploaded CSV or TXT file.
+ * NOTE: requireAuth is applied INDIVIDUALLY so multer processes the body FIRST
+ * (multer must handle multipart before auth can read headers on some proxies).
  */
-router.post('/leads/parse', upload.single('file'), async (req: Request, res: Response, next: NextFunction) => {
+router.post('/leads/parse', requireAuth, upload.single('file'), async (req: Request, res: Response, next: NextFunction) => {
   try {
     if (!req.file) {
-      return res.status(400).json({ error: 'No file uploaded.' });
+      return res.status(400).json({ error: 'No file was uploaded. Please attach a CSV or TXT file.' });
     }
 
     const content = req.file.buffer.toString('utf8');
+    if (!content.trim()) {
+      return res.status(400).json({ error: 'The uploaded file appears to be empty.' });
+    }
+
     const emails: string[] = [];
     const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
 
-    // Check if the file resembles a CSV
-    if (req.file.mimetype === 'text/csv' || content.includes(',')) {
+    // Try CSV parse first, fallback to regex
+    const looksLikeCsv = req.file.mimetype === 'text/csv'
+      || req.file.originalname.endsWith('.csv')
+      || content.includes(',');
+
+    if (looksLikeCsv) {
       try {
-        const records = parse(content, { skip_empty_lines: true });
+        const records = parse(content, { skip_empty_lines: true, relax_column_count: true });
         for (const row of records) {
           for (const cell of row) {
             const val = String(cell).trim();
@@ -53,18 +65,17 @@ router.post('/leads/parse', upload.single('file'), async (req: Request, res: Res
             }
           }
         }
-      } catch (parseErr) {
-        // Fallback to simple regex parsing if CSV parsing fails
+      } catch {
+        // Fallback: plain regex on raw content
         const matches = content.match(emailRegex);
         if (matches) emails.push(...matches);
       }
     } else {
-      // Direct regex extraction for plain text files
+      // Plain text — one per line or comma separated
       const matches = content.match(emailRegex);
       if (matches) emails.push(...matches);
     }
 
-    // Deduplicate
     const uniqueEmails = Array.from(new Set(emails.map(e => e.toLowerCase())));
     return res.json({ count: uniqueEmails.length, emails: uniqueEmails });
   } catch (error) {
@@ -72,15 +83,24 @@ router.post('/leads/parse', upload.single('file'), async (req: Request, res: Res
   }
 });
 
+// Apply auth middleware to all remaining routes
+router.use(requireAuth);
+
 /**
  * POST /api/campaigns
- * Compose campaign and schedule staggered emails
+ * Creates campaign and schedules staggered emails.
  */
 router.post('/campaigns', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const parseResult = campaignInputSchema.safeParse(req.body);
     if (!parseResult.success) {
       return res.status(400).json({ error: parseResult.error.errors[0].message });
+    }
+
+    // Validate startTime is in the future (with 30s grace period)
+    const startTime = parseResult.data.startTime;
+    if (startTime.getTime() < Date.now() - 30_000) {
+      return res.status(400).json({ error: 'Start time must be in the future.' });
     }
 
     const result = await createCampaign({
@@ -96,7 +116,7 @@ router.post('/campaigns', async (req: Request, res: Response, next: NextFunction
 
 /**
  * GET /api/emails
- * Paginated list of emails, supporting status and campaign filtering.
+ * Paginated list of emails with optional status/campaign filters.
  */
 router.get('/emails', async (req: Request, res: Response, next: NextFunction) => {
   try {
@@ -119,7 +139,6 @@ router.get('/emails', async (req: Request, res: Response, next: NextFunction) =>
     let countQuery = db.selectFrom('emails')
       .select(db.fn.count<number>('emails.id').as('count'));
 
-    // Filters
     if (status) {
       const statuses = String(status).split(',') as any[];
       query = query.where('emails.status', 'in', statuses);
@@ -131,23 +150,17 @@ router.get('/emails', async (req: Request, res: Response, next: NextFunction) =>
       countQuery = countQuery.where('emails.campaign_id', '=', String(campaignId));
     }
 
-    // Pagination
-    const limitNum = parseInt(String(limit), 10);
-    const offsetNum = parseInt(String(offset), 10);
+    const limitNum = Math.min(parseInt(String(limit), 10) || 20, 100);
+    const offsetNum = Math.max(parseInt(String(offset), 10) || 0, 0);
 
     const [emails, totalResult] = await Promise.all([
-      query.orderBy('emails.scheduled_at', 'desc')
-        .limit(limitNum)
-        .offset(offsetNum)
-        .execute(),
+      query.orderBy('emails.scheduled_at', 'desc').limit(limitNum).offset(offsetNum).execute(),
       countQuery.executeTakeFirst(),
     ]);
 
-    const totalCount = Number(totalResult?.count ?? 0);
-
     return res.json({
       emails,
-      totalCount,
+      totalCount: Number(totalResult?.count ?? 0),
       limit: limitNum,
       offset: offsetNum,
     });
@@ -158,15 +171,12 @@ router.get('/emails', async (req: Request, res: Response, next: NextFunction) =>
 
 /**
  * GET /api/stats
- * Aggregated counters for dashboard widgets
+ * Aggregated status counters for the dashboard widgets.
  */
 router.get('/stats', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const stats = await db.selectFrom('emails')
-      .select([
-        'status',
-        db.fn.count<number>('id').as('count')
-      ])
+      .select(['status', db.fn.count<number>('id').as('count')])
       .groupBy('status')
       .execute();
 
@@ -188,7 +198,7 @@ router.get('/stats', async (req: Request, res: Response, next: NextFunction) => 
     const totalRes = await db.selectFrom('emails')
       .select(db.fn.count<number>('id').as('count'))
       .executeTakeFirst();
-      
+
     counts.total = Number(totalRes?.count ?? 0);
 
     return res.json(counts);

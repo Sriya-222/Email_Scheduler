@@ -2,12 +2,28 @@ import { User, Sender, Email, DashboardStats } from './types';
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://reachinbox-backend-923e.onrender.com/api';
 
+// --- Token management ---
+export function getToken(): string | null {
+  return localStorage.getItem('auth_token');
+}
+
+export function setToken(token: string): void {
+  localStorage.setItem('auth_token', token);
+}
+
+export function clearToken(): void {
+  localStorage.removeItem('auth_token');
+}
+
+// --- Core request function ---
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const url = `${API_BASE_URL}${path}`;
-  
+
+  // Always send cookies for same-domain environments + cross-domain fallback
   options.credentials = 'include';
-  
-  const token = localStorage.getItem('auth_token');
+
+  // Build headers, always attach Bearer token if available
+  const token = getToken();
   const headers: Record<string, string> = {
     ...(options.headers as Record<string, string>),
   };
@@ -16,20 +32,28 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     headers['Authorization'] = `Bearer ${token}`;
   }
 
+  // Only set Content-Type for JSON (not FormData — browser sets boundary automatically)
   if (options.body && !(options.body instanceof FormData)) {
     headers['Content-Type'] = 'application/json';
   }
 
   options.headers = headers;
 
-  const response = await fetch(url, options);
+  let response: Response;
+  try {
+    response = await fetch(url, options);
+  } catch (networkErr: any) {
+    const err: any = new Error('Network error: cannot reach the server. Please try again.');
+    err.status = 0;
+    throw err;
+  }
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
-    const err: any = new Error(errorData.error || `HTTP error! Status: ${response.status}`);
+    const err: any = new Error(errorData.error || `Request failed with status ${response.status}`);
     err.status = response.status;
     if (response.status === 401) {
-      localStorage.removeItem('auth_token');
+      clearToken();
     }
     throw err;
   }
@@ -38,42 +62,50 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 }
 
 export const api = {
-  // Auth API
-  async loginWithGoogle(idToken: string): Promise<{ user: User; token?: string }> {
+  // --- Auth ---
+  async loginWithGoogle(idToken: string): Promise<{ user: User }> {
     const data = await request<{ user: User; token?: string }>('/auth/google', {
       method: 'POST',
       body: JSON.stringify({ idToken }),
     });
     if (data.token) {
-      localStorage.setItem('auth_token', data.token);
+      setToken(data.token);
     }
-    return data;
+    return { user: data.user };
   },
 
   async getCurrentUser(): Promise<{ user: User }> {
     return request<{ user: User }>('/auth/me');
   },
 
-  async logout(): Promise<{ success: boolean }> {
-    localStorage.removeItem('auth_token');
-    return request<{ success: boolean }>('/auth/logout', {
-      method: 'POST',
-    });
+  async logout(): Promise<void> {
+    try {
+      await request<{ success: boolean }>('/auth/logout', { method: 'POST' });
+    } catch {
+      // Ignore errors on logout — always clear local state
+    } finally {
+      clearToken();
+    }
   },
 
-  // Senders API
+  // --- Senders ---
   async getSenders(): Promise<Sender[]> {
     return request<Sender[]>('/senders');
   },
 
-  async createSender(data: { name: string; smtp_user: string; smtp_pass: string; max_per_hour: number }): Promise<Sender> {
+  async createSender(data: {
+    name: string;
+    smtp_user: string;
+    smtp_pass: string;
+    max_per_hour: number;
+  }): Promise<Sender> {
     return request<Sender>('/senders', {
       method: 'POST',
       body: JSON.stringify(data),
     });
   },
 
-  // Campaigns & Emails API
+  // --- Campaigns & Emails ---
   async createCampaign(data: {
     subject: string;
     body: string;
@@ -110,13 +142,14 @@ export const api = {
     return request<DashboardStats>('/stats');
   },
 
-  // Lead CSV Uploader
+  // --- Lead upload (multipart/form-data) ---
   async uploadLeads(file: File): Promise<{ count: number; emails: string[] }> {
     const formData = new FormData();
     formData.append('file', file);
     return request<{ count: number; emails: string[] }>('/leads/parse', {
       method: 'POST',
       body: formData,
+      // NOTE: Do NOT set Content-Type — browser must set multipart boundary automatically
     });
   },
 };
