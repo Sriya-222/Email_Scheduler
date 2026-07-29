@@ -56,12 +56,29 @@ export async function createCampaign(data: CreateCampaignInput) {
   });
 
   // 3. Enqueue jobs in BullMQ (only done if DB transaction successfully commits)
+  // If Redis is unavailable, we log and continue — emails remain in DB with
+  // status='scheduled' and will be re-enqueued by reconcilePendingEmails() on next startup.
+  let enqueuedCount = 0;
   for (const email of emailsToSchedule) {
-    await scheduleEmailJob({
-      id: email.id,
-      senderId: email.sender_id,
-      scheduledAt: email.scheduled_at,
-    });
+    try {
+      await scheduleEmailJob({
+        id: email.id,
+        senderId: email.sender_id,
+        scheduledAt: email.scheduled_at,
+      });
+      enqueuedCount++;
+    } catch (err) {
+      console.error(
+        `[emailService] Failed to enqueue BullMQ job for email ${email.id} — Redis may be unavailable. Email saved in DB and will be reconciled on restart.`,
+        err
+      );
+    }
+  }
+
+  if (enqueuedCount < emailsToSchedule.length) {
+    console.warn(
+      `[emailService] Only ${enqueuedCount}/${emailsToSchedule.length} jobs enqueued in BullMQ. Check Redis connection.`
+    );
   }
 
   return {

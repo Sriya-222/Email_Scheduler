@@ -13,6 +13,7 @@ const envSchema = z.object({
   DB_USER: z.string().default('scheduler'),
   DB_PASSWORD: z.string().default('scheduler_pw'),
   DB_NAME: z.string().default('reachinbox_scheduler'),
+  REDIS_URL: z.string().optional(),          // Full Upstash URL e.g. rediss://:password@host:port
   REDIS_HOST: z.string().default('localhost'),
   REDIS_PORT: z.coerce.number().default(6379),
   REDIS_PASSWORD: z.string().default(''),
