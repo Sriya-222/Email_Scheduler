@@ -43,7 +43,14 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   try {
     response = await fetch(url, options);
   } catch (networkErr: any) {
-    const err: any = new Error('Network error: cannot reach the server. Please try again.');
+    // AbortError = request was intentionally cancelled (e.g., timeout) — don't show toast for this
+    if (networkErr?.name === 'AbortError') {
+      const err: any = new Error('Request timed out.');
+      err.status = -1; // -1 = timeout/abort (distinct from 0 = connection refused)
+      throw err;
+    }
+    // Real network failure — server unreachable (Render cold start, no internet, etc.)
+    const err: any = new Error('Server is warming up. Please wait a moment and try again.');
     err.status = 0;
     throw err;
   }
