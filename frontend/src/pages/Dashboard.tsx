@@ -39,13 +39,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
       const data = await api.getStats();
       setStats(data);
     } catch (err: any) {
-      if (err.status === 401) {
-        onLogout();
-      } else {
-        console.error('Failed to load dashboard stats:', err);
-      }
+      console.error('Failed to load dashboard stats:', err);
     }
-  }, [onLogout]);
+  }, []);
 
   const fetchEmails = useCallback(async (showLoading = false) => {
     if (showLoading) setLoading(true);
@@ -65,15 +61,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, onLogout }) => {
       setEmails(data.emails);
       setTotalCount(data.totalCount);
     } catch (err: any) {
-      if (err.status === 401) {
-        onLogout();
-      } else if (showLoading) {
+      if (showLoading) {
         error(err.message || 'Failed to load email records.');
       }
     } finally {
       if (showLoading) setLoading(false);
     }
-  }, [activeTab, offset, error, onLogout]);
+  }, [activeTab, offset, error]);
 
   // Combined fetch trigger
   const refreshData = useCallback(async (showLoading = false) => {
