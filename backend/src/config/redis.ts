@@ -1,23 +1,17 @@
-import Redis from 'ioredis';
+import Redis, { RedisOptions } from 'ioredis';
 import { env } from './env';
 
-/**
- * Builds a Redis connection config object or URL for ioredis.
- * BullMQ requires maxRetriesPerRequest: null on ALL connections.
- */
-function buildConnectionOptions(opts: {
-  enableOfflineQueue: boolean;
-  retryStrategy?: (times: number) => number | null;
-}) {
+/** Parse the Upstash REDIS_URL and merge with extra ioredis options */
+function createClient(extra: Partial<RedisOptions>): Redis {
   const rawUrl = env.REDIS_URL?.trim();
 
-  // Use REDIS_URL if it is a valid Redis connection string
   if (rawUrl && (rawUrl.startsWith('redis://') || rawUrl.startsWith('rediss://'))) {
-    return { url: rawUrl, ...opts };
+    // ioredis accepts the URL as the first argument and options as the second
+    return new Redis(rawUrl, extra);
   }
 
   if (rawUrl) {
-    console.warn('[Redis] REDIS_URL is set but invalid (must start with redis:// or rediss://). Using REDIS_HOST/PORT/PASSWORD.');
+    console.warn('[Redis] REDIS_URL is invalid (must start with redis:// or rediss://). Falling back to host/port/password.');
   }
 
   const isLocal =
@@ -25,64 +19,54 @@ function buildConnectionOptions(opts: {
     env.REDIS_HOST === '127.0.0.1' ||
     env.REDIS_HOST === 'redis';
 
-  return {
+  return new Redis({
     host: env.REDIS_HOST,
     port: env.REDIS_PORT,
     password: env.REDIS_PASSWORD || undefined,
     tls: isLocal ? undefined : {},
-    ...opts,
-  };
+    ...extra,
+  });
 }
 
-/**
- * Connection used by BullMQ Queue (adding / scheduling jobs).
- * enableOfflineQueue: false → fail immediately if Redis is down
- * instead of silently queuing commands and hanging forever.
- */
-export const redisConnection = new Redis({
-  ...buildConnectionOptions({
-    enableOfflineQueue: false,
-    retryStrategy: (times) => {
-      if (times > 5) {
-        console.error('[Redis:Queue] Max retries reached — email enqueue will degrade gracefully.');
-        return null;
-      }
-      return Math.min(times * 500, 3000);
-    },
-  }),
-  maxRetriesPerRequest: null, // Required by BullMQ
+// ─── Queue connection (used by BullMQ Queue / rate limiter) ───────────────────
+// enableOfflineQueue: false → fail fast if Redis is down (no silent hangs)
+export const redisConnection = createClient({
+  maxRetriesPerRequest: null,    // Required by BullMQ
+  enableOfflineQueue: false,
   connectTimeout: 10_000,
   commandTimeout: 8_000,
-} as any);
+  retryStrategy: (times) => {
+    if (times > 5) {
+      console.error('[Redis:Queue] Max retries reached — running without queue.');
+      return null;
+    }
+    return Math.min(times * 500, 3000);
+  },
+});
 
-/**
- * Separate connection used by BullMQ Worker.
- * enableOfflineQueue MUST be true (default) so the worker can
- * transparently reconnect after a brief Redis blip without crashing.
- * maxRetriesPerRequest: null is required by BullMQ.
- */
-export const redisWorkerConnection = new Redis({
-  ...buildConnectionOptions({
-    enableOfflineQueue: true, // Worker NEEDS this to reconnect seamlessly
-    retryStrategy: (times) => {
-      // Worker always retries — it is a long-running process
-      const delay = Math.min(times * 1000, 30_000); // max 30s between retries
-      console.warn(`[Redis:Worker] Retry #${times}, next attempt in ${delay}ms`);
-      return delay;
-    },
-  }),
-  maxRetriesPerRequest: null,
+// ─── Worker connection (used by BullMQ Worker) ────────────────────────────────
+// enableOfflineQueue MUST be true (default) — Worker uses long-polling (bzpopmin)
+// and needs to transparently reconnect without throwing on every brief disconnect.
+export const redisWorkerConnection = createClient({
+  maxRetriesPerRequest: null,    // Required by BullMQ
+  enableOfflineQueue: true,
   connectTimeout: 15_000,
-} as any);
+  retryStrategy: (times) => {
+    // Worker always retries indefinitely
+    const delay = Math.min(times * 1000, 30_000);
+    console.warn(`[Redis:Worker] Retry #${times}, next attempt in ${delay}ms`);
+    return delay;
+  },
+});
 
-// Shared event logging
-function attachEvents(client: Redis, label: string) {
-  client.on('connect', () => console.log(`[Redis:${label}] Connected.`));
-  client.on('ready', () => console.log(`[Redis:${label}] Ready.`));
-  client.on('error', (err) => console.error(`[Redis:${label}] Error:`, err?.message || String(err)));
-  client.on('close', () => console.warn(`[Redis:${label}] Connection closed.`));
-  client.on('reconnecting', () => console.log(`[Redis:${label}] Reconnecting...`));
+// ─── Event logging ────────────────────────────────────────────────────────────
+function attach(client: Redis, label: string) {
+  client.on('connect',     () => console.log(`[Redis:${label}] Connected.`));
+  client.on('ready',       () => console.log(`[Redis:${label}] Ready.`));
+  client.on('reconnecting',() => console.log(`[Redis:${label}] Reconnecting…`));
+  client.on('close',       () => console.warn(`[Redis:${label}] Connection closed.`));
+  client.on('error',       (e) => console.error(`[Redis:${label}] Error:`, e?.message || String(e)));
 }
 
-attachEvents(redisConnection, 'Queue');
-attachEvents(redisWorkerConnection, 'Worker');
+attach(redisConnection,       'Queue');
+attach(redisWorkerConnection, 'Worker');
