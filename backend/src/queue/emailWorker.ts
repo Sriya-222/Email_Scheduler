@@ -1,5 +1,5 @@
 import { Worker, Job, DelayedError } from 'bullmq';
-import { redisConnection } from '../config/redis';
+import { redisWorkerConnection } from '../config/redis';
 import { db } from '../config/db';
 import { tryConsumeSlot, nextHourBoundary } from './rateLimiter';
 import { sendViaEthereal } from '../services/mailer';
@@ -100,7 +100,7 @@ export const emailWorker = new Worker(
     }
   },
   {
-    connection: redisConnection,
+    connection: redisWorkerConnection, // Use auto-reconnect connection for Worker
     concurrency: env.WORKER_CONCURRENCY,
   }
 );
