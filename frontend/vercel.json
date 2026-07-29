@@ -1,0 +1,9 @@
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "framework": "vite",
+  "env": {
+    "VITE_GOOGLE_CLIENT_ID": "345784379236-aks9f1khsjqk1bm1c0eu0lig23a83cr6.apps.googleusercontent.com",
+    "VITE_API_URL": "https://reachinbox-backend-923e.onrender.com/api"
+  }
+}

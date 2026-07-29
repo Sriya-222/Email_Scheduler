@@ -60,6 +60,10 @@ services:
         value: 2000
       - key: MAX_EMAILS_PER_HOUR
         value: 200
+      - key: GOOGLE_CLIENT_ID
+        value: 345784379236-aks9f1khsjqk1bm1c0eu0lig23a83cr6.apps.googleusercontent.com
+      - key: FRONTEND_URL
+        value: https://email-scheduler-ecru.vercel.app
 
   # 4. Web Service: React/Nginx Frontend
   - type: web
