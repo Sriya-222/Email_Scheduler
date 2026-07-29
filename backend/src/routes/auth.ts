@@ -64,7 +64,7 @@ router.post('/google', async (req: Request, res: Response, next: NextFunction) =
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     });
 
-    return res.json({ user: sessionUser });
+    return res.json({ user: sessionUser, token });
   } catch (error) {
     return next(error);
   }

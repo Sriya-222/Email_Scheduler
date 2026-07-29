@@ -10,6 +10,9 @@ import { env } from './config/env';
 
 const app = express();
 
+// Trust reverse proxy (Render / Cloudflare) for secure cookies
+app.set('trust proxy', 1);
+
 // Configure CORS to allow frontend calls with cookie credentials
 const allowedOrigins = [
   'http://localhost:5173',

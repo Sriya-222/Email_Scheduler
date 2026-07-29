@@ -5,15 +5,22 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://reachinbox-backend
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const url = `${API_BASE_URL}${path}`;
   
-  // Always include credentials to send/receive cookies
   options.credentials = 'include';
   
-  if (options.body && !(options.body instanceof FormData)) {
-    options.headers = {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    };
+  const token = localStorage.getItem('auth_token');
+  const headers: Record<string, string> = {
+    ...(options.headers as Record<string, string>),
+  };
+
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
   }
+
+  if (options.body && !(options.body instanceof FormData)) {
+    headers['Content-Type'] = 'application/json';
+  }
+
+  options.headers = headers;
 
   const response = await fetch(url, options);
 
@@ -21,6 +28,9 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     const errorData = await response.json().catch(() => ({}));
     const err: any = new Error(errorData.error || `HTTP error! Status: ${response.status}`);
     err.status = response.status;
+    if (response.status === 401) {
+      localStorage.removeItem('auth_token');
+    }
     throw err;
   }
 
@@ -29,11 +39,15 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
 export const api = {
   // Auth API
-  async loginWithGoogle(idToken: string): Promise<{ user: User }> {
-    return request<{ user: User }>('/auth/google', {
+  async loginWithGoogle(idToken: string): Promise<{ user: User; token?: string }> {
+    const data = await request<{ user: User; token?: string }>('/auth/google', {
       method: 'POST',
       body: JSON.stringify({ idToken }),
     });
+    if (data.token) {
+      localStorage.setItem('auth_token', data.token);
+    }
+    return data;
   },
 
   async getCurrentUser(): Promise<{ user: User }> {
@@ -41,6 +55,7 @@ export const api = {
   },
 
   async logout(): Promise<{ success: boolean }> {
+    localStorage.removeItem('auth_token');
     return request<{ success: boolean }>('/auth/logout', {
       method: 'POST',
     });

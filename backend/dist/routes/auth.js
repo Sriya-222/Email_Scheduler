@@ -57,7 +57,7 @@ router.post('/google', async (req, res, next) => {
             sameSite: env_1.env.NODE_ENV === 'production' ? 'none' : 'lax',
             maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
         });
-        return res.json({ user: sessionUser });
+        return res.json({ user: sessionUser, token });
     }
     catch (error) {
         return next(error);

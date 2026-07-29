@@ -12,6 +12,8 @@ const senders_1 = __importDefault(require("./routes/senders"));
 const emails_1 = __importDefault(require("./routes/emails"));
 const env_1 = require("./config/env");
 const app = (0, express_1.default)();
+// Trust reverse proxy (Render / Cloudflare) for secure cookies
+app.set('trust proxy', 1);
 // Configure CORS to allow frontend calls with cookie credentials
 const allowedOrigins = [
     'http://localhost:5173',
