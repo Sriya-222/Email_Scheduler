@@ -132,11 +132,15 @@ export const ComposeModal: React.FC<ComposeModalProps> = ({ isOpen, onClose, onC
                 onChange={(e) => setSelectedSenderId(e.target.value)}
                 required
               >
-                {senders.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name} ({s.smtp_user})
-                  </option>
-                ))}
+                {senders.length === 0 ? (
+                  <option value="">No senders found (Please log in or refresh)</option>
+                ) : (
+                  senders.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} ({s.smtp_user})
+                    </option>
+                  ))
+                )}
               </select>
             </div>
 
