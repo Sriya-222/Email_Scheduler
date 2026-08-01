@@ -4,6 +4,10 @@ import { env } from './env';
 import { Database } from '../types';
 import fs from 'fs';
 import path from 'path';
+
+// Cloud databases like Aiven require SSL; local/docker hosts do not
+const isLocalDb = ['localhost', '127.0.0.1', 'mysql'].includes(env.DB_HOST);
+
 const pool = createPool({
   host: env.DB_HOST,
   port: env.DB_PORT,
@@ -11,6 +15,7 @@ const pool = createPool({
   password: env.DB_PASSWORD,
   database: env.DB_NAME,
   connectionLimit: 10,
+  ssl: isLocalDb ? undefined : { rejectUnauthorized: false },
 });
 export const db = new Kysely<Database>({
   dialect: new MysqlDialect({ pool: pool as any }),
@@ -23,7 +28,13 @@ export async function initializeDatabase() {
   } catch (error: any) {
     console.log('Database tables not found. Executing schema.sql...');
     try {
-      const schemaPath = path.resolve(process.cwd(), 'src/db/schema.sql');
+      // Try multiple possible locations for the schema file
+      const candidates = [
+        path.resolve(process.cwd(), 'src/db/schema.sql'),
+        path.resolve(__dirname, '../../src/db/schema.sql'),
+        path.resolve(__dirname, '../db/schema.sql'),
+      ];
+      const schemaPath = candidates.find(p => fs.existsSync(p)) || candidates[0];
       const schemaSql = fs.readFileSync(schemaPath, 'utf8');
       
       // Clean and split schema SQL statements
